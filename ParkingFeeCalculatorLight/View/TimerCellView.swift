@@ -109,19 +109,22 @@ struct TimerCellView: View {
                             }
                         }
 
+                        Divider()
+
                         // 추가 무료시간 Stepper
                         VStack(spacing: 8) {
                             HStack {
                                 Text("추가 무료시간")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .font(.subheadline)
+                                    .foregroundColor(.primary)
+                                    .fontWeight(.medium)
 
                                 Spacer()
 
-                                Text("\(additionalFreeMinutes)분")
-                                    .font(.caption)
+                                Text(formatAdditionalFreeTime(additionalFreeMinutes))
+                                    .font(.subheadline)
                                     .foregroundColor(.blue)
-                                    .fontWeight(.medium)
+                                    .fontWeight(.semibold)
 
                                 Stepper(
                                     value: $additionalFreeMinutes,
@@ -133,6 +136,66 @@ struct TimerCellView: View {
                                 .onChange(of: additionalFreeMinutes) { _, newValue in
                                     updateSessionWithAdditionalFreeMinutes(newValue)
                                 }
+                            }
+                        }
+
+                        Divider()
+                    }
+                    .padding(.horizontal, 16)
+
+                    // 시간별 예상 요금 표시
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("예상 주차 요금")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+
+                            Spacer()
+
+                            Text("현재 시간 기준")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+
+                        LazyVGrid(columns: [
+                            GridItem(.flexible()),
+                            GridItem(.flexible()),
+                            GridItem(.flexible()),
+                            GridItem(.flexible())
+                        ], spacing: 8) {
+                            ForEach([1, 2, 3, 4, 6, 8, 10, 12], id: \.self) { hours in
+                                VStack(spacing: 6) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "clock")
+                                            .font(.caption2)
+                                            .foregroundColor(.blue)
+
+                                        Text("+\(hours)시간")
+                                            .font(.subheadline)
+                                            .fontWeight(.bold)
+                                            .foregroundColor(.secondary)
+                                            .lineLimit(1)
+                                            .minimumScaleFactor(0.7)
+                                    }
+
+                                    Text(formatCurrency(calculateFutureFee(hours: hours)))
+                                        .font(.callout)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.primary)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.6)
+                                }
+                                .padding(.vertical, 10)
+                                .padding(.horizontal, 6)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(Color(.systemBackground))
+                                        .shadow(color: .black.opacity(0.1), radius: 3, x: 0, y: 2)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color(.systemGray5), lineWidth: 0.5)
+                                )
                             }
                         }
                     }
@@ -235,6 +298,35 @@ struct TimerCellView: View {
         return formatter.string(from: date)
     }
 
+    private func formatAdditionalFreeTime(_ minutes: Int) -> String {
+        if minutes == 0 {
+            return "0분"
+        }
+
+        let hours = minutes / 60
+        let remainingMinutes = minutes % 60
+
+        if hours == 0 {
+            return "\(remainingMinutes)분"
+        } else if remainingMinutes == 0 {
+            return "\(hours)시간"
+        } else {
+            return "\(hours)시간 \(remainingMinutes)분"
+        }
+    }
+
+    private func formatCurrency(_ amount: Int) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.groupingSeparator = ","
+        formatter.groupingSize = 3
+
+        if let formattedAmount = formatter.string(from: NSNumber(value: amount)) {
+            return "\(formattedAmount)원"
+        }
+        return "\(amount)원"
+    }
+
     // MARK: - Actions
 
     private func stopParking() {
@@ -274,6 +366,35 @@ struct TimerCellView: View {
 
         // DataManager에도 업데이트 반영
         DataManager.shared.saveActiveParkingSession(updatedSession)
+    }
+
+    // MARK: - 미래 시간 요금 계산
+    private func calculateFutureFee(hours: Int) -> Int {
+        guard let session = activeParkingSession else { return 0 }
+
+        // 주차 시작부터 N시간 경과 시점 (N시간 - 1초, 즉 N시간 59분 59초)
+        let targetElapsedTime = TimeInterval(hours * 3600 - 1)
+
+        // 업데이트된 세션으로 미래 시점 요금 계산 (현재 UI 상태의 추가 무료시간 반영)
+        let updatedSession = ParkingSession(
+            sessionId: session.sessionId,
+            startTime: session.startTime,
+            parkingLot: session.parkingLot,
+            vehicle: session.vehicle,
+            driver: session.driver,
+            additionalFreeMinutes: additionalFreeMinutes
+        )
+
+        // 절대 시간 기준 요금 계산 (주차 시작부터 N시간 경과 시점)
+        let feeResult = session.parkingLot.parkingFeeCalculator.calculateFee(
+            duration: targetElapsedTime,
+            vehicleProfile: updatedSession.vehicle,
+            driverProfile: updatedSession.driver,
+            specialConditionDiscounts: session.parkingLot.specialConditionDiscounts,
+            additionalFreeMinutes: updatedSession.additionalFreeMinutes
+        )
+
+        return feeResult.finalFee
     }
 }
 

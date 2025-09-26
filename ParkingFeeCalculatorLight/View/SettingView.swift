@@ -87,9 +87,9 @@ struct SettingView: View {
                     }
 
                     HStack {
-                        Text("개발자")
+                        Text("개발")
                         Spacer()
-                        Text("문주성")
+                        Text("Science Fiction Inc.")
                             .foregroundColor(.secondary)
                     }
                 }
