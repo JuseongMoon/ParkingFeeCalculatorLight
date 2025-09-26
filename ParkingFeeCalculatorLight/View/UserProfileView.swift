@@ -38,10 +38,14 @@ struct UserProfileView: View {
                 }
             }
             .sheet(isPresented: $showingDriverForm) {
-                DriverFormView(driverProfile: $userProfileVM.driverProfile)
+                DriverFormView(driverProfile: $userProfileVM.driverProfile, onSave: { profile in
+                    userProfileVM.updateDriverProfile(profile)
+                })
             }
             .sheet(isPresented: $showingVehicleForm) {
-                VehicleFormView(vehicleProfile: $userProfileVM.vehicleProfile)
+                VehicleFormView(vehicleProfile: $userProfileVM.vehicleProfile, onSave: { profile in
+                    userProfileVM.updateVehicleProfile(profile)
+                })
             }
         }
     }
@@ -338,10 +342,12 @@ struct DriverFormView: View {
     @Binding var driverProfile: DriverProfile
     @Environment(\.dismiss) private var dismiss
     @State private var tempProfile: DriverProfile
+    let onSave: (DriverProfile) -> Void
 
-    init(driverProfile: Binding<DriverProfile>) {
+    init(driverProfile: Binding<DriverProfile>, onSave: @escaping (DriverProfile) -> Void) {
         self._driverProfile = driverProfile
         self._tempProfile = State(initialValue: driverProfile.wrappedValue)
+        self.onSave = onSave
     }
 
     var body: some View {
@@ -378,6 +384,7 @@ struct DriverFormView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("저장") {
                         driverProfile = tempProfile
+                        onSave(tempProfile)
                         dismiss()
                     }
                 }
@@ -391,10 +398,12 @@ struct VehicleFormView: View {
     @Binding var vehicleProfile: VehicleProfile
     @Environment(\.dismiss) private var dismiss
     @State private var tempProfile: VehicleProfile
+    let onSave: (VehicleProfile) -> Void
 
-    init(vehicleProfile: Binding<VehicleProfile>) {
+    init(vehicleProfile: Binding<VehicleProfile>, onSave: @escaping (VehicleProfile) -> Void) {
         self._vehicleProfile = vehicleProfile
         self._tempProfile = State(initialValue: vehicleProfile.wrappedValue)
+        self.onSave = onSave
     }
 
     var body: some View {
@@ -426,6 +435,7 @@ struct VehicleFormView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("저장") {
                         vehicleProfile = tempProfile
+                        onSave(tempProfile)
                         dismiss()
                     }
                 }

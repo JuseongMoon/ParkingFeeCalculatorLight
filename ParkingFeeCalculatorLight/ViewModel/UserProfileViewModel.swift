@@ -10,25 +10,41 @@ import Combine
 
 @MainActor
 class UserProfileViewModel: ObservableObject {
-    @Published var driverProfile: DriverProfile = DriverProfile()
-    @Published var vehicleProfile: VehicleProfile = VehicleProfile()
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
 
     private var cancellables = Set<AnyCancellable>()
     private let dataManager = DataManager.shared
 
+    // DataManager의 @Published 프로퍼티에 직접 접근
+    var driverProfile: DriverProfile {
+        get { dataManager.driverProfile }
+        set { dataManager.driverProfile = newValue }
+    }
+
+    var vehicleProfile: VehicleProfile {
+        get { dataManager.vehicleProfile }
+        set { dataManager.vehicleProfile = newValue }
+    }
+
     init() {
-        loadProfiles()
+        setupDataManagerObservers()
+    }
+
+    // MARK: - DataManager Observer Setup
+    private func setupDataManagerObservers() {
+        // DataManager의 프로퍼티 변경을 관찰하여 UI 업데이트 트리거
+        dataManager.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
     }
 
     // MARK: - Profile Management
     func loadProfiles() {
-        isLoading = true
-
-        driverProfile = dataManager.loadDriverProfile()
-        vehicleProfile = dataManager.loadVehicleProfile()
-
+        // DataManager에서 이미 초기화되므로 별도 로드 불필요
         isLoading = false
     }
 
@@ -41,8 +57,8 @@ class UserProfileViewModel: ObservableObject {
             try await Task.sleep(nanoseconds: 500_000_000) // 0.5초 지연
 
             await MainActor.run {
-                self.dataManager.saveDriverProfile(self.driverProfile)
-                self.dataManager.saveVehicleProfile(self.vehicleProfile)
+                self.dataManager.saveDriverProfile(self.dataManager.driverProfile)
+                self.dataManager.saveVehicleProfile(self.dataManager.vehicleProfile)
                 self.isLoading = false
             }
         } catch {
@@ -54,22 +70,20 @@ class UserProfileViewModel: ObservableObject {
     }
 
     func updateDriverProfile(_ profile: DriverProfile) {
-        driverProfile = profile
         dataManager.saveDriverProfile(profile)
     }
 
     func updateVehicleProfile(_ profile: VehicleProfile) {
-        vehicleProfile = profile
         dataManager.saveVehicleProfile(profile)
     }
 
     // MARK: - Validation
     var isDriverProfileComplete: Bool {
-        return driverProfile.isProfileComplete
+        return dataManager.driverProfile.isProfileComplete
     }
 
     var isVehicleProfileComplete: Bool {
-        return vehicleProfile.isProfileComplete
+        return dataManager.vehicleProfile.isProfileComplete
     }
 
     var areProfilesComplete: Bool {
@@ -78,13 +92,11 @@ class UserProfileViewModel: ObservableObject {
 
     // MARK: - Profile Actions
     func resetDriverProfile() {
-        driverProfile = DriverProfile()
-        dataManager.saveDriverProfile(driverProfile)
+        dataManager.saveDriverProfile(DriverProfile())
     }
 
     func resetVehicleProfile() {
-        vehicleProfile = VehicleProfile()
-        dataManager.saveVehicleProfile(vehicleProfile)
+        dataManager.saveVehicleProfile(VehicleProfile())
     }
 
     func resetAllProfiles() {
@@ -94,10 +106,10 @@ class UserProfileViewModel: ObservableObject {
 
     // MARK: - Fee Calculation Helper
     func getCurrentDriverProfile() -> DriverProfile {
-        return driverProfile
+        return dataManager.driverProfile
     }
 
     func getCurrentVehicleProfile() -> VehicleProfile {
-        return vehicleProfile
+        return dataManager.vehicleProfile
     }
 }

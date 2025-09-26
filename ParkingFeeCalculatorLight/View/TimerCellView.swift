@@ -13,6 +13,7 @@ struct TimerCellView: View {
     @State private var currentTime = Date()
     @State private var displayTimer: Timer?
     @State private var showingStopConfirmation = false
+    @State private var additionalFreeMinutes: Int = 0
 
     var body: some View {
         VStack(spacing: 16) {
@@ -107,6 +108,33 @@ struct TimerCellView: View {
                                 }
                             }
                         }
+
+                        // 추가 무료시간 Stepper
+                        VStack(spacing: 8) {
+                            HStack {
+                                Text("추가 무료시간")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+
+                                Spacer()
+
+                                Text("\(additionalFreeMinutes)분")
+                                    .font(.caption)
+                                    .foregroundColor(.blue)
+                                    .fontWeight(.medium)
+
+                                Stepper(
+                                    value: $additionalFreeMinutes,
+                                    in: 0...300,
+                                    step: 30
+                                ) {
+                                    EmptyView()
+                                }
+                                .onChange(of: additionalFreeMinutes) { _, newValue in
+                                    updateSessionWithAdditionalFreeMinutes(newValue)
+                                }
+                            }
+                        }
                     }
                     .padding(.horizontal, 16)
 
@@ -156,9 +184,21 @@ struct TimerCellView: View {
         .cornerRadius(16)
         .onAppear {
             startTimer()
+            // 초기 additionalFreeMinutes 설정
+            if let session = activeParkingSession {
+                additionalFreeMinutes = session.additionalFreeMinutes
+            }
         }
         .onDisappear {
             stopTimer()
+        }
+        .onChange(of: activeParkingSession) { _, newSession in
+            // 세션이 변경되면 additionalFreeMinutes도 동기화
+            if let session = newSession {
+                additionalFreeMinutes = session.additionalFreeMinutes
+            } else {
+                additionalFreeMinutes = 0
+            }
         }
         .alert("주차 종료", isPresented: $showingStopConfirmation) {
             Button("취소", role: .cancel) { }
@@ -213,6 +253,27 @@ struct TimerCellView: View {
     private func stopTimer() {
         displayTimer?.invalidate()
         displayTimer = nil
+    }
+
+    // MARK: - 추가 무료시간 업데이트
+    private func updateSessionWithAdditionalFreeMinutes(_ newValue: Int) {
+        guard let currentSession = activeParkingSession else { return }
+
+        // 새로운 ParkingSession 생성 (additionalFreeMinutes 업데이트)
+        let updatedSession = ParkingSession(
+            sessionId: currentSession.sessionId,
+            startTime: currentSession.startTime,
+            parkingLot: currentSession.parkingLot,
+            vehicle: currentSession.vehicle,
+            driver: currentSession.driver,
+            additionalFreeMinutes: newValue
+        )
+
+        // 세션 업데이트
+        activeParkingSession = updatedSession
+
+        // DataManager에도 업데이트 반영
+        DataManager.shared.saveActiveParkingSession(updatedSession)
     }
 }
 

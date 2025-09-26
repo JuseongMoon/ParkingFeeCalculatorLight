@@ -11,6 +11,8 @@ import SwiftUI
 
 class DataManager: ObservableObject {
     @Published var parkingLots: [ParkingLotProfile] = []
+    @Published var driverProfile: DriverProfile = DriverProfile()
+    @Published var vehicleProfile: VehicleProfile = VehicleProfile()
     static let shared = DataManager()
 
     private let userDefaults = UserDefaults.standard
@@ -25,6 +27,8 @@ class DataManager: ObservableObject {
 
     private init() {
         parkingLots = loadParkingLots()
+        driverProfile = loadDriverProfile()
+        vehicleProfile = loadVehicleProfile()
     }
 
     // MARK: - 주차장 관리
@@ -118,6 +122,9 @@ class DataManager: ObservableObject {
         do {
             let data = try JSONEncoder().encode(profile)
             userDefaults.set(data, forKey: Keys.userProfile)
+            DispatchQueue.main.async {
+                self.driverProfile = profile
+            }
         } catch {
             print("사용자 프로필 저장 실패: \(error)")
         }
@@ -125,14 +132,20 @@ class DataManager: ObservableObject {
 
     func loadDriverProfile() -> DriverProfile {
         guard let data = userDefaults.data(forKey: Keys.userProfile) else {
-            return DriverProfile() // 기본 프로필 반환
+            let defaultProfile = DriverProfile()
+            self.driverProfile = defaultProfile // @Published 프로퍼티도 업데이트
+            return defaultProfile
         }
 
         do {
-            return try JSONDecoder().decode(DriverProfile.self, from: data)
+            let profile = try JSONDecoder().decode(DriverProfile.self, from: data)
+            self.driverProfile = profile // @Published 프로퍼티도 업데이트
+            return profile
         } catch {
             print("사용자 프로필 로드 실패: \(error)")
-            return DriverProfile() // 기본 프로필 반환
+            let defaultProfile = DriverProfile()
+            self.driverProfile = defaultProfile // @Published 프로퍼티도 업데이트
+            return defaultProfile
         }
     }
 
@@ -140,6 +153,9 @@ class DataManager: ObservableObject {
         do {
             let data = try JSONEncoder().encode(profile)
             userDefaults.set(data, forKey: Keys.vehicleProfile)
+            DispatchQueue.main.async {
+                self.vehicleProfile = profile
+            }
         } catch {
             print("차량 프로필 저장 실패: \(error)")
         }
@@ -147,14 +163,20 @@ class DataManager: ObservableObject {
 
     func loadVehicleProfile() -> VehicleProfile {
         guard let data = userDefaults.data(forKey: Keys.vehicleProfile) else {
-            return VehicleProfile() // 기본 프로필 반환
+            let defaultProfile = VehicleProfile()
+            self.vehicleProfile = defaultProfile // @Published 프로퍼티도 업데이트
+            return defaultProfile
         }
 
         do {
-            return try JSONDecoder().decode(VehicleProfile.self, from: data)
+            let profile = try JSONDecoder().decode(VehicleProfile.self, from: data)
+            self.vehicleProfile = profile // @Published 프로퍼티도 업데이트
+            return profile
         } catch {
             print("차량 프로필 로드 실패: \(error)")
-            return VehicleProfile() // 기본 프로필 반환
+            let defaultProfile = VehicleProfile()
+            self.vehicleProfile = defaultProfile // @Published 프로퍼티도 업데이트
+            return defaultProfile
         }
     }
 
@@ -170,8 +192,8 @@ class DataManager: ObservableObject {
         driver: DriverProfile? = nil,
         additionalFreeMinutes: Int = 0
     ) -> ParkingSession {
-        let vehicleProfile = vehicle ?? loadVehicleProfile()
-        let driverProfile = driver ?? loadDriverProfile()
+        let vehicleProfile = vehicle ?? self.vehicleProfile
+        let driverProfile = driver ?? self.driverProfile
 
         let session = ParkingSession(
             startTime: Date(),

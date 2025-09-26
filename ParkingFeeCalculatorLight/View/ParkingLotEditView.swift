@@ -9,7 +9,7 @@ import SwiftUI
 
 struct ParkingLotEditView: View {
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var dataManager = DataManager.shared
+    @ObservedObject private var dataManager = DataManager.shared
 
     @State private var name: String = ""
     @State private var address: String = ""
@@ -61,17 +61,38 @@ struct ParkingLotEditView: View {
     @State private var useTimeBasedPricing: Bool = false
     @State private var pricingTiers: [TimeBasedPricingTier] = []
 
+    // 모든 할인 항목 표시 여부
+    @State private var showAllDiscounts: Bool = false
+
     let parkingLotProfile: ParkingLotProfile?
     let onSave: (ParkingLotProfile) -> Void
 
     // 사용자 프로필 정보 (간소화)
     private var driverProfile: DriverProfile {
-        dataManager.loadDriverProfile()
+        dataManager.driverProfile
     }
 
     private var vehicleProfile: VehicleProfile {
-        dataManager.loadVehicleProfile()
+        dataManager.vehicleProfile
     }
+
+    // 각 할인 섹션별 해당 여부 확인
+    private var hasApplicableSpecialDiscounts: Bool {
+        return driverProfile.isDisabled ||
+               driverProfile.isNationalMerit ||
+               driverProfile.isExemplaryTaxpayer ||
+               driverProfile.isMultiChild ||
+               driverProfile.isSenior
+    }
+
+    private var hasApplicableVehicleSizeDiscounts: Bool {
+        return vehicleProfile.vehicleSize == .light || vehicleProfile.vehicleSize == .large
+    }
+
+    private var hasApplicableEcoDiscounts: Bool {
+        return vehicleProfile.isElectric || vehicleProfile.isHydrogen || vehicleProfile.isHybrid
+    }
+
 
     init(parkingLotProfile: ParkingLotProfile? = nil, onSave: @escaping (ParkingLotProfile) -> Void) {
         self.parkingLotProfile = parkingLotProfile
@@ -159,7 +180,7 @@ struct ParkingLotEditView: View {
                 }
 
                 Section {
-                    Toggle("추가시간별 요금 활성화", isOn: $useTimeBasedPricing)
+                    Toggle("시간당 단계별 요금 활성화", isOn: $useTimeBasedPricing)
                         .onChange(of: useTimeBasedPricing) { _, newValue in
                             if newValue && pricingTiers.isEmpty {
                                 addPricingTier()
@@ -168,14 +189,14 @@ struct ParkingLotEditView: View {
 
                     if useTimeBasedPricing {
                         ForEach(pricingTiers.indices, id: \.self) { index in
-                            VStack(alignment: .leading, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 18) {
                                 Text("구간 \(index + 1)")
                                     .font(.title3)
                                     .foregroundColor(.primary)
 
                                 Stepper(value: $pricingTiers[index].thresholdMinutes, in: getMinThreshold(for: index)...getMaxThreshold(for: index), step: 30) {
                                     HStack {
-                                        Text("\(formatTimeDisplay(pricingTiers[index].thresholdMinutes))이후 부터")
+                                        Text("\(formatTimeDisplay(pricingTiers[index].thresholdMinutes)) 이후 부터")
                                         Spacer()
                                         Text("\(pricingTiers[index].thresholdMinutes)분")
                                             .foregroundColor(.secondary)
@@ -218,7 +239,7 @@ struct ParkingLotEditView: View {
                 }
 
                 Section("할인 및 제한") {
-                    Stepper(value: $freeMinutes, in: 0...60, step: 5) { row("무료시간", suffix: "분", value: freeMinutes) }
+                    Stepper(value: $freeMinutes, in: 0...60, step: 5) { row("기본 무료시간", suffix: "분", value: freeMinutes) }
 
                     Toggle("1회 최대요금 적용", isOn: $hasMaxFee)
                     if hasMaxFee {
@@ -268,142 +289,174 @@ struct ParkingLotEditView: View {
                     }
                 }
 
-                Section("특별 조건 할인") {
-                    discountToggle("경증 장애인 할인", isOn: $hasMildDiscount, isApplicable: driverProfile.isDisabled && driverProfile.disabilityLevel == .mild)
-                        .onChange(of: hasMildDiscount) { _, newValue in
-                            if newValue && mildDiscountPercentage == 0 {
-                                mildDiscountPercentage = 80
+                if showAllDiscounts || hasApplicableSpecialDiscounts {
+                    Section("특별 조건 할인") {
+                        if showAllDiscounts || (driverProfile.isDisabled && driverProfile.disabilityLevel == .mild) {
+                            discountToggle("경증 장애인 할인", isOn: $hasMildDiscount, isApplicable: driverProfile.isDisabled && driverProfile.disabilityLevel == .mild, showCheckmark: showAllDiscounts)
+                                .onChange(of: hasMildDiscount) { _, newValue in
+                                    if newValue && mildDiscountPercentage == 0 {
+                                        mildDiscountPercentage = 80
+                                    }
+                                }
+                            if hasMildDiscount {
+                                Stepper(value: $mildDiscountPercentage, in: 0...100, step: 5) {
+                                    row("경증 할인율", suffix: "%", value: Int(mildDiscountPercentage))
+                                }
                             }
                         }
-                    if hasMildDiscount {
-                        Stepper(value: $mildDiscountPercentage, in: 0...100, step: 5) {
-                            row("경증 할인율", suffix: "%", value: Int(mildDiscountPercentage))
-                        }
-                    }
 
-                    discountToggle("중증 장애인 할인", isOn: $hasSevereDiscount, isApplicable: driverProfile.isDisabled && driverProfile.disabilityLevel == .severe)
-                        .onChange(of: hasSevereDiscount) { _, newValue in
-                            if newValue && severeDiscountPercentage == 0 {
-                                severeDiscountPercentage = 80
+                        if showAllDiscounts || (driverProfile.isDisabled && driverProfile.disabilityLevel == .severe) {
+                            discountToggle("중증 장애인 할인", isOn: $hasSevereDiscount, isApplicable: driverProfile.isDisabled && driverProfile.disabilityLevel == .severe, showCheckmark: showAllDiscounts)
+                                .onChange(of: hasSevereDiscount) { _, newValue in
+                                    if newValue && severeDiscountPercentage == 0 {
+                                        severeDiscountPercentage = 80
+                                    }
+                                }
+                            if hasSevereDiscount {
+                                Stepper(value: $severeDiscountPercentage, in: 0...100, step: 5) {
+                                    row("중증 할인율", suffix: "%", value: Int(severeDiscountPercentage))
+                                }
                             }
                         }
-                    if hasSevereDiscount {
-                        Stepper(value: $severeDiscountPercentage, in: 0...100, step: 5) {
-                            row("중증 할인율", suffix: "%", value: Int(severeDiscountPercentage))
-                        }
-                    }
 
-                    discountToggle("국가유공자 할인", isOn: $hasNationalMeritDiscount, isApplicable: driverProfile.isNationalMerit)
-                        .onChange(of: hasNationalMeritDiscount) { _, newValue in
-                            if newValue && nationalMeritDiscountPercentage == 0 {
-                                nationalMeritDiscountPercentage = 80
+                        if showAllDiscounts || driverProfile.isNationalMerit {
+                            discountToggle("국가유공자 할인", isOn: $hasNationalMeritDiscount, isApplicable: driverProfile.isNationalMerit, showCheckmark: showAllDiscounts)
+                                .onChange(of: hasNationalMeritDiscount) { _, newValue in
+                                    if newValue && nationalMeritDiscountPercentage == 0 {
+                                        nationalMeritDiscountPercentage = 80
+                                    }
+                                }
+                            if hasNationalMeritDiscount {
+                                Stepper(value: $nationalMeritDiscountPercentage, in: 0...100, step: 5) {
+                                    row("국가유공자 할인율", suffix: "%", value: Int(nationalMeritDiscountPercentage))
+                                }
                             }
                         }
-                    if hasNationalMeritDiscount {
-                        Stepper(value: $nationalMeritDiscountPercentage, in: 0...100, step: 5) {
-                            row("국가유공자 할인율", suffix: "%", value: Int(nationalMeritDiscountPercentage))
-                        }
-                    }
 
-                    discountToggle("모범납세자 할인", isOn: $hasExemplaryTaxpayerDiscount, isApplicable: driverProfile.isExemplaryTaxpayer)
-                        .onChange(of: hasExemplaryTaxpayerDiscount) { _, newValue in
-                            if newValue && exemplaryTaxpayerDiscountPercentage == 0 {
-                                exemplaryTaxpayerDiscountPercentage = 100
+                        if showAllDiscounts || driverProfile.isExemplaryTaxpayer {
+                            discountToggle("모범납세자 할인", isOn: $hasExemplaryTaxpayerDiscount, isApplicable: driverProfile.isExemplaryTaxpayer, showCheckmark: showAllDiscounts)
+                                .onChange(of: hasExemplaryTaxpayerDiscount) { _, newValue in
+                                    if newValue && exemplaryTaxpayerDiscountPercentage == 0 {
+                                        exemplaryTaxpayerDiscountPercentage = 100
+                                    }
+                                }
+                            if hasExemplaryTaxpayerDiscount {
+                                Stepper(value: $exemplaryTaxpayerDiscountPercentage, in: 0...100, step: 5) {
+                                    row("모범납세자 할인율", suffix: "%", value: Int(exemplaryTaxpayerDiscountPercentage))
+                                }
                             }
                         }
-                    if hasExemplaryTaxpayerDiscount {
-                        Stepper(value: $exemplaryTaxpayerDiscountPercentage, in: 0...100, step: 5) {
-                            row("모범납세자 할인율", suffix: "%", value: Int(exemplaryTaxpayerDiscountPercentage))
-                        }
-                    }
 
-                    discountToggle("다자녀 할인", isOn: $hasMultiChildDiscount, isApplicable: driverProfile.isMultiChild)
-                        .onChange(of: hasMultiChildDiscount) { _, newValue in
-                            if newValue && multiChildDiscountPercentage == 0 {
-                                multiChildDiscountPercentage = 50
+                        if showAllDiscounts || driverProfile.isMultiChild {
+                            discountToggle("다자녀 할인", isOn: $hasMultiChildDiscount, isApplicable: driverProfile.isMultiChild, showCheckmark: showAllDiscounts)
+                                .onChange(of: hasMultiChildDiscount) { _, newValue in
+                                    if newValue && multiChildDiscountPercentage == 0 {
+                                        multiChildDiscountPercentage = 50
+                                    }
+                                }
+                            if hasMultiChildDiscount {
+                                Stepper(value: $multiChildDiscountPercentage, in: 0...100, step: 5) {
+                                    row("다자녀 할인율", suffix: "%", value: Int(multiChildDiscountPercentage))
+                                }
                             }
                         }
-                    if hasMultiChildDiscount {
-                        Stepper(value: $multiChildDiscountPercentage, in: 0...100, step: 5) {
-                            row("다자녀 할인율", suffix: "%", value: Int(multiChildDiscountPercentage))
-                        }
-                    }
 
-                    discountToggle("고령자 할인", isOn: $hasSeniorDiscount, isApplicable: driverProfile.isSenior)
-                        .onChange(of: hasSeniorDiscount) { _, newValue in
-                            if newValue && seniorDiscountPercentage == 0 {
-                                seniorDiscountPercentage = 50
+                        if showAllDiscounts || driverProfile.isSenior {
+                            discountToggle("고령자 할인", isOn: $hasSeniorDiscount, isApplicable: driverProfile.isSenior, showCheckmark: showAllDiscounts)
+                                .onChange(of: hasSeniorDiscount) { _, newValue in
+                                    if newValue && seniorDiscountPercentage == 0 {
+                                        seniorDiscountPercentage = 50
+                                    }
+                                }
+                            if hasSeniorDiscount {
+                                Stepper(value: $seniorDiscountPercentage, in: 0...100, step: 5) {
+                                    row("고령자 할인율", suffix: "%", value: Int(seniorDiscountPercentage))
+                                }
                             }
-                        }
-                    if hasSeniorDiscount {
-                        Stepper(value: $seniorDiscountPercentage, in: 0...100, step: 5) {
-                            row("고령자 할인율", suffix: "%", value: Int(seniorDiscountPercentage))
                         }
                     }
                 }
 
-                Section("차량 크기별 할인") {
-                    discountToggle("경차 할인", isOn: $hasLightCarDiscount, isApplicable: vehicleProfile.vehicleSize == .light)
-                        .onChange(of: hasLightCarDiscount) { _, newValue in
-                            if newValue && lightCarDiscountPercentage == 0 {
-                                lightCarDiscountPercentage = 50
+                if showAllDiscounts || hasApplicableVehicleSizeDiscounts {
+                    Section("차량 크기별 할인") {
+                        if showAllDiscounts || vehicleProfile.vehicleSize == .light {
+                            discountToggle("경차 할인", isOn: $hasLightCarDiscount, isApplicable: vehicleProfile.vehicleSize == .light, showCheckmark: showAllDiscounts)
+                                .onChange(of: hasLightCarDiscount) { _, newValue in
+                                    if newValue && lightCarDiscountPercentage == 0 {
+                                        lightCarDiscountPercentage = 50
+                                    }
+                                }
+                            if hasLightCarDiscount {
+                                Stepper(value: $lightCarDiscountPercentage, in: 0...100, step: 5) {
+                                    row("경차 할인율", suffix: "%", value: Int(lightCarDiscountPercentage))
+                                }
                             }
                         }
-                    if hasLightCarDiscount {
-                        Stepper(value: $lightCarDiscountPercentage, in: 0...100, step: 5) {
-                            row("경차 할인율", suffix: "%", value: Int(lightCarDiscountPercentage))
-                        }
-                    }
 
-                    discountToggle("대형차 할증", isOn: $hasLargeCarDiscount, isApplicable: vehicleProfile.vehicleSize == .large)
-                        .onChange(of: hasLargeCarDiscount) { _, newValue in
-                            if newValue && largeCarDiscountPercentage == 0 {
-                                largeCarDiscountPercentage = 0
+                        if showAllDiscounts || vehicleProfile.vehicleSize == .large {
+                            discountToggle("대형차 할증", isOn: $hasLargeCarDiscount, isApplicable: vehicleProfile.vehicleSize == .large, showCheckmark: showAllDiscounts)
+                                .onChange(of: hasLargeCarDiscount) { _, newValue in
+                                    if newValue && largeCarDiscountPercentage == 0 {
+                                        largeCarDiscountPercentage = 0
+                                    }
+                                }
+                            if hasLargeCarDiscount {
+                                Stepper(value: $largeCarDiscountPercentage, in: 100...300, step: 10) {
+                                    row("대형차 할증", suffix: "%", value: Int(largeCarDiscountPercentage))
+                                }
                             }
-                        }
-                    if hasLargeCarDiscount {
-                        Stepper(value: $largeCarDiscountPercentage, in: 100...300, step: 10) {
-                            row("대형차 할증", suffix: "%", value: Int(largeCarDiscountPercentage))
                         }
                     }
                 }
 
-                Section("친환경 차량 할인") {
-                    discountToggle("전기차 할인", isOn: $hasElectricDiscount, isApplicable: vehicleProfile.isElectric)
-                        .onChange(of: hasElectricDiscount) { _, newValue in
-                            if newValue && electricDiscountPercentage == 0 {
-                                electricDiscountPercentage = 50
+                if showAllDiscounts || hasApplicableEcoDiscounts {
+                    Section("친환경 차량 할인") {
+                        if showAllDiscounts || vehicleProfile.isElectric {
+                            discountToggle("전기차 할인", isOn: $hasElectricDiscount, isApplicable: vehicleProfile.isElectric, showCheckmark: showAllDiscounts)
+                                .onChange(of: hasElectricDiscount) { _, newValue in
+                                    if newValue && electricDiscountPercentage == 0 {
+                                        electricDiscountPercentage = 50
+                                    }
+                                }
+                            if hasElectricDiscount {
+                                Stepper(value: $electricDiscountPercentage, in: 0...100, step: 5) {
+                                    row("전기차 할인율", suffix: "%", value: Int(electricDiscountPercentage))
+                                }
                             }
                         }
-                    if hasElectricDiscount {
-                        Stepper(value: $electricDiscountPercentage, in: 0...100, step: 5) {
-                            row("전기차 할인율", suffix: "%", value: Int(electricDiscountPercentage))
-                        }
-                    }
 
-                    discountToggle("수소차 할인", isOn: $hasHydrogenDiscount, isApplicable: vehicleProfile.isHydrogen)
-                        .onChange(of: hasHydrogenDiscount) { _, newValue in
-                            if newValue && hydrogenDiscountPercentage == 0 {
-                                hydrogenDiscountPercentage = 50
+                        if showAllDiscounts || vehicleProfile.isHydrogen {
+                            discountToggle("수소차 할인", isOn: $hasHydrogenDiscount, isApplicable: vehicleProfile.isHydrogen, showCheckmark: showAllDiscounts)
+                                .onChange(of: hasHydrogenDiscount) { _, newValue in
+                                    if newValue && hydrogenDiscountPercentage == 0 {
+                                        hydrogenDiscountPercentage = 50
+                                    }
+                                }
+                            if hasHydrogenDiscount {
+                                Stepper(value: $hydrogenDiscountPercentage, in: 0...100, step: 5) {
+                                    row("수소차 할인율", suffix: "%", value: Int(hydrogenDiscountPercentage))
+                                }
                             }
                         }
-                    if hasHydrogenDiscount {
-                        Stepper(value: $hydrogenDiscountPercentage, in: 0...100, step: 5) {
-                            row("수소차 할인율", suffix: "%", value: Int(hydrogenDiscountPercentage))
-                        }
-                    }
 
-                    discountToggle("하이브리드 차량 할인", isOn: $hasHybridDiscount, isApplicable: vehicleProfile.isHybrid)
-                        .onChange(of: hasHybridDiscount) { _, newValue in
-                            if newValue && hybridDiscountPercentage == 0 {
-                                hybridDiscountPercentage = 50
+                        if showAllDiscounts || vehicleProfile.isHybrid {
+                            discountToggle("하이브리드 차량 할인", isOn: $hasHybridDiscount, isApplicable: vehicleProfile.isHybrid, showCheckmark: showAllDiscounts)
+                                .onChange(of: hasHybridDiscount) { _, newValue in
+                                    if newValue && hybridDiscountPercentage == 0 {
+                                        hybridDiscountPercentage = 50
+                                    }
+                                }
+                            if hasHybridDiscount {
+                                Stepper(value: $hybridDiscountPercentage, in: 0...100, step: 5) {
+                                    row("하이브리드 할인율", suffix: "%", value: Int(hybridDiscountPercentage))
+                                }
                             }
                         }
-                    if hasHybridDiscount {
-                        Stepper(value: $hybridDiscountPercentage, in: 0...100, step: 5) {
-                            row("하이브리드 할인율", suffix: "%", value: Int(hybridDiscountPercentage))
-                        }
                     }
+                }
+
+                Section {
+                    Toggle("모든 할인 항목 보기", isOn: $showAllDiscounts)
                 }
             }
             .navigationTitle(parkingLotProfile != nil ? "주차장 수정" : "주차장 추가")
@@ -490,11 +543,11 @@ struct ParkingLotEditView: View {
         }
     }
 
-    private func discountToggle(_ title: String, isOn: Binding<Bool>, isApplicable: Bool) -> some View {
+    private func discountToggle(_ title: String, isOn: Binding<Bool>, isApplicable: Bool, showCheckmark: Bool = true) -> some View {
         Toggle(isOn: isOn) {
             HStack {
                 Text(title)
-                if isApplicable {
+                if isApplicable && showCheckmark {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundColor(.green)
                         .font(.title3)
