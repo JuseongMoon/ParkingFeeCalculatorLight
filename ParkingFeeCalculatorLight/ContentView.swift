@@ -8,14 +8,33 @@
 import SwiftUI
 
 struct ContentView: View {
-    var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+    @AppStorage("appColorScheme") private var appColorScheme: String = "system"
+
+    var colorScheme: ColorScheme? {
+        switch appColorScheme {
+        case "light": return .light
+        case "dark": return .dark
+        default: return nil
         }
-        .padding()
+    }
+
+    var body: some View {
+        TabView {
+            NavigationStack {
+                ParkingLotListView()
+            }
+            .tabItem {
+                Label("주차장", systemImage: "parkingsign.circle")
+            }
+
+            NavigationStack {
+                SettingView()
+            }
+            .tabItem {
+                Label("설정", systemImage: "gearshape")
+            }
+        }
+        .preferredColorScheme(colorScheme)
     }
 }
 
