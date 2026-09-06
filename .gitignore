@@ -1,0 +1,39 @@
+# ── macOS ──────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# ── Xcode: 사용자별 상태 ────────────────────────
+# 열어둔 탭, 중단점, 스킴 선택 등 개인 작업 상태라 공유 대상이 아님
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad/
+*.xcscmblueprint
+*.xccheckout
+
+# ── Xcode: 빌드 산출물 ──────────────────────────
+DerivedData/
+build/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM
+*.dSYM.zip
+
+# ── Swift Package Manager ──────────────────────
+.build/
+.swiftpm/
+# NOTE: Package.resolved 는 앱 프로젝트에서 커밋한다(의존성 버전 잠금). 무시하지 않는다.
+
+# ── 에디터 임시 파일 ────────────────────────────
+*.swp
+*.swo
+*~
+
+# ── 시크릿 ──────────────────────────────────────
+# 값은 Secrets.xcconfig 에만 두고, 저장소에는 .example 만 올린다
+**/Secrets.xcconfig
+*.p8
+*.p12

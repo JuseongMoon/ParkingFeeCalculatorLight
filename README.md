@@ -3,7 +3,7 @@
 [ParkingFeeCalculator](https://github.com/JuseongMoon/ParkingFeeCalculator)에서
 위젯과 Live Activity를 걷어내고 **요금 계산과 주차장 관리만 남긴** 경량 버전입니다.
 
-- 플랫폼: iOS 26.0+ (SwiftUI)
+- 플랫폼: iOS 18.6+ (SwiftUI)
 - 외부 의존성 없음
 
 ## 왜 따로 만들었나
